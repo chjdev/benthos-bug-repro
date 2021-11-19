@@ -2,14 +2,16 @@ services:
   materialize:
     image: materialize/materialized:v0.9.13
     volumes:
-      - "/host/code/sproutfi/redpanda-repro/materialize:/views"
+      - "/home/chris/Projects/jumpinvest/benthos-repo/materialize:/views"
     depends_on:
       - redpanda
+    ports:
+      - "16875:6875"
   redpanda:
     image: vectorized/redpanda:v21.9.6
     command:
       - "redpanda start"
-      - "--smp 1"
+      - "--smp 4"
       - "--overprovisioned"
       - "--set redpanda.auto_create_topics_enabled=true"
       - "--set redpanda.enable_idempotence=true"
@@ -19,19 +21,28 @@ services:
       - PLAINTEXT://0.0.0.0:29092,OUTSIDE://redpanda:9092
       - --advertise-kafka-addr
       - PLAINTEXT://redpanda:29092,OUTSIDE://redpanda:9092
+    ports:
+      - "19092:9092"
   benthos:
     image: jeffail/benthos:3.58
     volumes:
-      - "/host/code/sproutfi/redpanda-repro/benthos:/etc/benthos"
-    command:
-      - "-c"
-      - "/etc/benthos/config.yaml"
+      - "/home/chris/Projects/jumpinvest/benthos-repo/benthos:/etc/benthos"
+    entrypoint: "/etc/benthos/start.sh"
     depends_on:
       - redpanda
+      - materialize
+  benthos_sleep:
+    image: jeffail/benthos:3.58
+    volumes:
+      - "/home/chris/Projects/jumpinvest/benthos-repo/benthos:/etc/benthos"
+    entrypoint: "/etc/benthos/start_sleep.sh"
+    depends_on:
+      - redpanda
+      - materialize
   postgresql:
     image: postgres
     volumes:
-      - "/host/code/sproutfi/redpanda-repro/materialize:/views"
+      - "/home/chris/Projects/jumpinvest/benthos-repo/materialize:/views"
     command:
       - "sh"
       - "-c"
@@ -42,14 +53,16 @@ services:
         psql -U materialize -p 6875 -h materialize < /views/materialize.sql
     depends_on:
       - materialize
-  write_stuff:
-    image: busybox
-    volumes:
-      - "/host/code/sproutfi/redpanda-repro/materialize:/views"
-    command:
-      - "sh"
-      - "-c"
-      - |
-        sleep 15
-        # I don't think the tail is actually working though
-        echo -ne '{"a":3,"b":5}\n{"a":15,"b":7}' >> /views/source.json
+#  write_stuff:
+#    image: busybox
+#    volumes:
+#      - "/home/chris/Projects/jumpinvest/benthos-repo/materialize:/views"
+#    command:
+#      - "sh"
+#      - "-c"
+#      - |
+#        echo "sleeping write"
+#        sleep 20
+#        echo "starting write"
+#        # I don't think the tail is actually working though
+#        echo -ne '{"a":3,"b":5}\n{"a":15,"b":7}' >> /views/source.json
